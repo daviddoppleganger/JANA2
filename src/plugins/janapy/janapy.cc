@@ -43,9 +43,16 @@
 #include <Python.h>
 using namespace std;
 
+
 #include <JANA/JApplication.h>
 #include <JANA/JThreadManager.h>
 #include <JANA/JCpuInfo.h>
+
+#include <pybind11/pybind11.h>
+namespace py = pybind11;
+#include <JEventProcessorPY.h>
+
+
 
 void JANA_PythonModuleInit(JApplication *sApp);
 
@@ -500,30 +507,47 @@ static PyMethodDef JANAPYMethods[] = {
 };
 //.....................................................
 
+void JANAPY_AddProcessor(py::object &pyproc )
+{
+
+    cout << "JANAPY2_AddProcessor called!" << endl;
+}
 
 //================================================================================
 // Module definition
 // The arguments of this structure tell Python what to call your extension,
 // what it's methods are and where to look for it's method definitions
-static struct PyModuleDef janapy__definition = {
-    PyModuleDef_HEAD_INIT,
-    "janapy",
-    "JANA2 Python module.",
-    -1,
-    JANAPYMethods
-};
+PYBIND11_MODULE(janapy, m) {
+py::class_<JEventProcessorPY>(m, "JEventProcessor")
+.def(py::init<py::object&>())
+.def("Init", &JEventProcessorPY::Init)
+.def("Process", &JEventProcessorPY::Process);
 
-//================================================================================
-// Module entry point (for import)
-PyMODINIT_FUNC PyInit_janapy(void) {
-
-	// Create JApplication. This is temporary and will likely be replaced
-	// when the arrow system is fully integrated/
-	pyjapp = new JApplication();
-
-	Py_Initialize();
-	return PyModule_Create(&janapy__definition);
+m.def("AddProcessor", &JANAPY_AddProcessor, "Add an event processor");
 }
+////================================================================================
+//// Module definition
+//// The arguments of this structure tell Python what to call your extension,
+//// what it's methods are and where to look for it's method definitions
+//static struct PyModuleDef janapy__definition = {
+//    PyModuleDef_HEAD_INIT,
+//    "janapy",
+//    "JANA2 Python module.",
+//    -1,
+//    JANAPYMethods
+//};
+//
+////================================================================================
+//// Module entry point (for import)
+//PyMODINIT_FUNC PyInit_janapy(void) {
+//
+//	// Create JApplication. This is temporary and will likely be replaced
+//	// when the arrow system is fully integrated/
+//	pyjapp = new JApplication();
+//
+//	Py_Initialize();
+//	return PyModule_Create(&janapy__definition);
+//}
 
 //-------------------------------------
 // JANA_PythonModuleInit
@@ -603,3 +627,4 @@ void JANA_PythonModuleInit(JApplication *sApp)
 	
 	PY_INITIALIZED = true;
 }
+
