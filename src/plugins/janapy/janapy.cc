@@ -48,9 +48,9 @@ using namespace std;
 #include <JANA/JThreadManager.h>
 #include <JANA/JCpuInfo.h>
 
-#include <pybind11/pybind11.h>
+#include "pybind11/pybind11.h"
 namespace py = pybind11;
-#include <JEventProcessorPY.h>
+#include "JEventProcessorPY.h"
 
 
 
@@ -72,8 +72,8 @@ void InitPlugin(JApplication *app){
 	InitJANAPlugin(app);
 
 	// Launch thread to handle Python interpreter.
-	std::thread thr(JANA_PythonModuleInit, app);
-	thr.detach();
+//	std::thread thr(JANA_PythonModuleInit, app);
+//	thr.detach();
 
 	// Wait for interpreter to initialize and possibly run script.
 	// This allows more control from python by stalling the initialization
@@ -586,18 +586,18 @@ void JANA_PythonModuleInit(JApplication *sApp)
 		PY_INITIALIZED = true;
 		return;
 	}
-	
+
 	pyjapp = sApp;
 
 	// Initialize interpreter and register the jana module
 	jout << "Initializing embedded Python ... " << std::endl;
 	PyEval_InitThreads();
 	Py_Initialize();
-#if PY_MAJOR_VERSION >= 3
-	PyModule_Create(&janapy__definition);
-#else // Python 2
-	Py_InitModule("jana", JANAPYMethods);
-#endif
+//#if PY_MAJOR_VERSION >= 3
+//	PyModule_Create(&janapy__definition);
+//#else // Python 2
+//	Py_InitModule("jana", JANAPYMethods);
+//#endif
 
 	// Get name of python file to execute
 	string fname = "jana.py";
@@ -607,12 +607,12 @@ void JANA_PythonModuleInit(JApplication *sApp)
 		auto JANA_PYTHON_FILE = getenv("JANA_PYTHON_FILE");
 		if( JANA_PYTHON_FILE ) fname = JANA_PYTHON_FILE;
 	}
-	
+
 //	PyGILState_STATE gstate = PyGILState_Ensure();
 //	PyEval_ReleaseLock();
 //	PyThreadState *_save = PyEval_SaveThread();
 //	Py_BEGIN_ALLOW_THREADS
-	
+
 	auto fil = std::fopen(fname.c_str(), "r");
 	if( fil ) {
 		jout << "Executing Python script: " << fname << " ..." << std::endl;
@@ -626,9 +626,9 @@ void JANA_PythonModuleInit(JApplication *sApp)
 		std::this_thread::sleep_for(std::chrono::seconds(1));
 		exit(-1);
 	}
-	
+
 //	Py_END_ALLOW_THREADS
-	
+
 	PY_INITIALIZED = true;
 }
 

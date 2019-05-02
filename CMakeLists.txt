@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 
+
 include_directories(src/lib)
 include_directories(src/lib/JANA)
 include_directories(src/lib/greenfield)
@@ -76,6 +77,18 @@ add_library(jana2 STATIC
 add_library(jtest SHARED
         src/lib/JANA/JThread.cc  #for THREAD_ID
         )
+
+# Build Python module/JANA plugin w/ built-in Python interpreter
+find_package (Python3 COMPONENTS Interpreter Development)
+if( Python3_FOUND )
+    add_subdirectory(src/plugins/janapy/pybind11-2.2.4)
+    add_library(janapy MODULE
+        src/plugins/janapy/janapy.cc
+        src/plugins/janapy/JEventProcessorPY.h
+        )
+    target_link_libraries(janapy PRIVATE pybind11::module jana2)
+    set_target_properties(janapy PROPERTIES PREFIX "${PYTHON_MODULE_PREFIX}" SUFFIX "${PYTHON_MODULE_EXTENSION}")
+endif( Python3_FOUND )
 
 add_executable(jana
         src/programs/jana/jana.cc
