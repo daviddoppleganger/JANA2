@@ -83,6 +83,30 @@ void InitPlugin(JApplication *app){
 }
 } // "C"
 
+//.....................................................
+
+void JANAPY_AddProcessor(py::object &pyproc )
+{
+
+    cout << "JANAPY2_AddProcessor called!" << endl;
+}
+
+//================================================================================
+// Module definition
+// The arguments of this structure tell Python what to call your extension,
+// what it's methods are and where to look for it's method definitions
+PYBIND11_MODULE(janapy, m) {
+py::class_<JEventProcessorPY>(m, "JEventProcessor")
+.def(py::init<py::object&>())
+.def("Init", &JEventProcessorPY::Init)
+.def("Process", &JEventProcessorPY::Process);
+
+m.def("AddProcessor", &JANAPY_AddProcessor, "Add an event processor");
+}
+
+//================================================================================
+
+
 //..........................................................
 // The following effectively make a template out of "PV" so it can
 // be used to convert all types to PyObjects
@@ -505,26 +529,6 @@ static PyMethodDef JANAPYMethods[] = {
 	{"PrintParameters",             janapy_PrintParameters,             METH_VARARGS, "Print configuration parameters. Pass True to print all. Otherwise, only non-default ones will be printed."},
 	{NULL, NULL, 0, NULL}
 };
-//.....................................................
-
-void JANAPY_AddProcessor(py::object &pyproc )
-{
-
-    cout << "JANAPY2_AddProcessor called!" << endl;
-}
-
-//================================================================================
-// Module definition
-// The arguments of this structure tell Python what to call your extension,
-// what it's methods are and where to look for it's method definitions
-PYBIND11_MODULE(janapy, m) {
-py::class_<JEventProcessorPY>(m, "JEventProcessor")
-.def(py::init<py::object&>())
-.def("Init", &JEventProcessorPY::Init)
-.def("Process", &JEventProcessorPY::Process);
-
-m.def("AddProcessor", &JANAPY_AddProcessor, "Add an event processor");
-}
 ////================================================================================
 //// Module definition
 //// The arguments of this structure tell Python what to call your extension,
