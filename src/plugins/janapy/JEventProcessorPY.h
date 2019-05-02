@@ -21,8 +21,8 @@ class JEventProcessorPY : public JEventProcessor{
 
         cout << "JEventProcessorPY constructor called with py:object"  << endl;
 
-        pymProcess = pyobj.attr("Init");
-        pymInit = pyobj.attr("Process");
+        pymInit = pyobj.attr("Init");
+        pymProcess = pyobj.attr("Process");
 
     }
 
