@@ -88,8 +88,7 @@ JApplication::JApplication(JParameterManager* params,
 //---------------------------------
 JApplication::~JApplication()
 {
-	for( auto p: _factoryGenerators     ) delete p;
-	for( auto p: _eventProcessors       ) delete p;
+	for( auto p: _factoryGenerators_to_delete     ) delete p;
 	if( _pmanager           ) delete _pmanager;
 	if( _threadManager      ) delete _threadManager;
 	if( _eventSourceManager ) delete _eventSourceManager;
@@ -536,12 +535,11 @@ void JApplication::Run()
 		_threadManager->JoinThreads();
 	}
 
-	// Delete event processors
-	for(auto sProcessor : _eventProcessors){
-		sProcessor->Finish(); // (this may not be necessary since it is always next to destructor)
-		delete sProcessor;
-	}
-	_eventProcessors.clear();
+	// Finish event processors and delete any we own
+	for( auto sProcessor : _eventProcessors           ) sProcessor->Finish(); // (this may not be necessary since it is always next to destructor)
+    for( auto sProcessor : _eventProcessors_to_delete ) delete sProcessor;
+    _eventProcessors.clear();
+    _eventProcessors_to_delete.clear();
 
 	// Report Final numbers
 	PrintFinalReport();
@@ -606,21 +604,28 @@ void JApplication::Add(JEventSourceGenerator *source_generator)
 //---------------------------------
 // Add - JFactoryGenerator
 //---------------------------------
-void JApplication::Add(JFactoryGenerator *factory_generator)
+void JApplication::Add(JFactoryGenerator *factory_generator, bool auto_delete)
 {
 	/// Add the given JFactoryGenerator to the list of queues
 	///
 	/// @param factory_generator pointer to factory generator to add. Ownership is passed to JApplication
+    /// @param auto_delete Ownership is passed to JApplication (default)
 
 	_factoryGenerators.push_back( factory_generator );
+    if( auto_delete ) _factoryGenerators_to_delete.push_back( factory_generator );
 }
 
 //---------------------------------
 // Add - JEventProcessor
 //---------------------------------
-void JApplication::Add(JEventProcessor *processor)
+void JApplication::Add(JEventProcessor *processor, bool auto_delete)
 {
+    /// Add the given JFactoryGenerator to the list of queues
+    ///
+    /// @param processor pointer to an event processor to add.
+    /// @param auto_delete Ownership is passed to JApplication (default)
 	_eventProcessors.push_back( processor );
+	if( auto_delete ) _eventProcessors_to_delete.push_back( processor );
 	mNumProcessorsAdded++;
 }
 

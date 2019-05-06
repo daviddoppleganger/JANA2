@@ -111,7 +111,7 @@ void janapy_AddProcessor(py::object &pyproc )
 {
     cout << "JANAPY2_AddProcessor called!" << endl;
     JEventProcessorPY *proc = pyproc.cast<JEventProcessorPY *>();
-    pyjapp->Add( proc );
+    pyjapp->Add( proc , false);
 }
 
 //================================================================================

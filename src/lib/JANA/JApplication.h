@@ -106,8 +106,8 @@ class JApplication{
 		void Resume(void);
 
 		void Add(JEventSourceGenerator *source_generator);
-		void Add(JFactoryGenerator *factory_generator);
-		void Add(JEventProcessor *processor);
+		void Add(JFactoryGenerator *factory_generator, bool auto_delete=true);
+		void Add(JEventProcessor *processor, bool auto_delete=true);
 
 		void AddPlugin(string plugin_name);
 		void AddPluginPath(string path);
@@ -153,8 +153,10 @@ class JApplication{
 		std::vector<string> _plugin_paths;
 		std::vector<void*> _sohandles;
 		std::vector<JFactoryGenerator*> _factoryGenerators;
+        std::vector<JFactoryGenerator*> _factoryGenerators_to_delete;
 		std::vector<JCalibrationGenerator*> _calibrationGenerators;
 		std::vector<JEventProcessor*> _eventProcessors;
+		std::vector<JEventProcessor*> _eventProcessors_to_delete;
 
 		std::shared_ptr<JLogger> _logger;
 		JParameterManager *_pmanager;
