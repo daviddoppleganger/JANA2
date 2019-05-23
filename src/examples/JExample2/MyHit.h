@@ -1,8 +1,8 @@
 
-#include <string>
-
 #ifndef _MyHit_h_
 #define _MyHit_h_
+
+#include <JANA/JObject.h>
 
 class MyHit:public JObject{
 	public:
