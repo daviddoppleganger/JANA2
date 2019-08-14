@@ -101,11 +101,11 @@ add_library(jana2 STATIC
         src/lib/JANA/JProcessorMapping.h
         src/lib/JANA/JProcessorMapping.cc
         src/lib/JANA/Streaming/JEventBuilder.h
+        src/lib/JANA/Streaming/JDiscreteJoin.h
         src/lib/JANA/Streaming/JStreamingEventSource.h
         src/lib/JANA/Streaming/JTransport.h
         src/lib/JANA/Streaming/JMessage.h
         src/lib/JANA/Streaming/JWindow.h
-        src/lib/JANA/Streaming/JMergeWindow.h
         src/lib/JANA/JComponentSummary.h
         src/lib/JANA/JComponentSummary.cc
         src/lib/JANA/JCsvWriter.h
@@ -120,7 +120,7 @@ add_executable(jana
         src/programs/jana/JBenchmarker.cc
         src/programs/jana/MyProcessor.cc
         src/programs/jana/MyProcessor.h
-        )
+        src/lib/JANA/Streaming/JDiscreteJoin.h src/lib/JANA/Streaming/JTrigger.h)
 
 target_link_libraries(jana jana2)
 target_link_libraries(jana Threads::Threads)
