@@ -189,6 +189,7 @@ JProcessingTopology *JTopologyBuilder::build_topology() {
 
     for (auto src : sEventSources) {
 
+        src->SetJApplication(m_app);
         JArrow* arrow = new JEventSourceArrow(src->GetName(), src, queue, topology->event_pool);
         arrow->set_backoff_tries(0);
         topology->arrows.push_back(arrow);
