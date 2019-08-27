@@ -49,12 +49,17 @@ void MonitoringProcessor::Process(const std::shared_ptr<const JEvent>& aEvent) {
     auto eventData = aEvent->Get<ADCSample>();
 
     std::lock_guard<std::mutex> lck(fillMutex);
-
+/*
     m_message->set_event_number(aEvent->GetEventNumber());
-    m_message->set_payload_size(0);
+    m_message->set_payload_size(4);
+    m_message->as_indra_message()->source_id = 22;
+    m_message->as_indra_message()->payload[0] = 69;
+    std::cout << "ZmqSink: Sent event " << aEvent->GetEventNumber() << "  (" << m_message->get_buffer_size() << " bytes)" << std::endl;
     m_transport->send(*m_message);
-    std::cout << "ZmqSink: Sent event " << aEvent->GetEventNumber();
+    */
 
+    auto original = aEvent->GetSingle<DASEventMessage>();
+    m_transport->send(*original);
 }
 
 //------------------
