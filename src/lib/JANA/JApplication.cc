@@ -33,12 +33,25 @@
 #include <JANA/JEventSourceGenerator.h>
 #include <JANA/JFactoryGenerator.h>
 
+<<<<<<< HEAD
 #include <JANA/Services/JParameterManager.h>
 #include <JANA/Services/JPluginLoader.h>
 #include <JANA/Services/JComponentManager.h>
 #include <JANA/Engine/JArrowProcessingController.h>
 #include <JANA/Engine/JDebugProcessingController.h>
 #include <JANA/Utils/JCpuInfo.h>
+=======
+//---------------------------------
+// ~JApplication    (Destructor)
+//---------------------------------
+JApplication::~JApplication()
+{
+	for( auto p: _factoryGenerators_to_delete     ) delete p;
+	if( _pmanager           ) delete _pmanager;
+	if( _threadManager      ) delete _threadManager;
+	if( _eventSourceManager ) delete _eventSourceManager;
+}
+>>>>>>> 5aff40ac1dd9cc997b10a38789910289c45843b1
 
 JApplication *japp = nullptr;
 
@@ -108,7 +121,76 @@ void JApplication::Add(std::string event_source_name) {
 }
 
 
+<<<<<<< HEAD
 // Controlling processing
+=======
+	// Setup all queues and attach plugins
+	Initialize();
+
+	// If something went wrong in Initialize() then we may be quitting early.
+	if(_quitting) return;
+
+	// Create all remaining threads (one may have been created in Init)
+	LOG_INFO(_logger) << "Creating " << _nthreads << " processing threads ..." << LOG_END;
+	_threadManager->CreateThreads(_nthreads);
+
+	// Optionally set thread affinity
+	try{
+		int affinity_algorithm = 0;
+		_pmanager->SetDefaultParameter("AFFINITY", affinity_algorithm, "Set the thread affinity algorithm. 0=none, 1=sequential, 2=core fill");
+		_threadManager->SetThreadAffinity( affinity_algorithm );
+	}catch(...){
+		LOG_ERROR(_logger) << "Unknown exception in JApplication::Run attempting to set thread affinity" << LOG_END;
+	}
+
+	// Print summary of all config parameters (if any aren't default)
+	GetJParameterManager()->PrintParameters(true);
+
+	// Start all threads running
+	jout << "Start processing ..." << endl;
+	mRunStartTime = std::chrono::high_resolution_clock::now();
+	_threadManager->RunThreads();
+
+	// Monitor status of all threads
+	while( !_quitting ){
+
+		// If we are finishing up (all input sources are closed, and are waiting for all events to finish processing)
+		// This flag is used by the integrated rate calculator
+		// The JThreadManager is in charge of telling all the threads to end
+		if(!_draining_queues)
+			_draining_queues = _eventSourceManager->AreAllFilesClosed();
+
+		// Check if all threads have finished
+		if(_threadManager->AreAllThreadsEnded())
+		{
+			std::cout << "All threads have ended.\n";
+			break;
+		}
+
+		// Sleep a few cycles
+		std::this_thread::sleep_for( std::chrono::milliseconds(500) );
+
+		// Print status
+		if( _ticker_on ) PrintStatus();
+	}
+
+	// Join all threads
+	jout << "Event processing ended. " << endl;
+	if (!_skip_join) {
+		cout << "Merging threads ..." << endl;
+		_threadManager->JoinThreads();
+	}
+
+	// Finish event processors and delete any we own
+	for( auto sProcessor : _eventProcessors           ) sProcessor->Finish(); // (this may not be necessary since it is always next to destructor)
+    for( auto sProcessor : _eventProcessors_to_delete ) delete sProcessor;
+    _eventProcessors.clear();
+    _eventProcessors_to_delete.clear();
+
+	// Report Final numbers
+	PrintFinalReport();
+}
+>>>>>>> 5aff40ac1dd9cc997b10a38789910289c45843b1
 
 void JApplication::Initialize() {
 
@@ -133,6 +215,7 @@ void JApplication::Initialize() {
         int engine_choice = 0;
         _params->SetDefaultParameter("jana:engine", engine_choice, "0: Arrow engine, 1: Debug engine");
 
+<<<<<<< HEAD
         if (engine_choice == 0) {
             auto topology = JArrowTopology::from_components(_component_manager, _params, _desired_nthreads);
             auto japc = std::make_shared<JArrowProcessingController>(topology);
@@ -157,6 +240,35 @@ void JApplication::Initialize() {
 }
 
 void JApplication::Run(bool wait_until_finished) {
+=======
+//---------------------------------
+// Add - JFactoryGenerator
+//---------------------------------
+void JApplication::Add(JFactoryGenerator *factory_generator, bool auto_delete)
+{
+	/// Add the given JFactoryGenerator to the list of queues
+	///
+	/// @param factory_generator pointer to factory generator to add. Ownership is passed to JApplication
+    /// @param auto_delete Ownership is passed to JApplication (default)
+
+	_factoryGenerators.push_back( factory_generator );
+    if( auto_delete ) _factoryGenerators_to_delete.push_back( factory_generator );
+}
+
+//---------------------------------
+// Add - JEventProcessor
+//---------------------------------
+void JApplication::Add(JEventProcessor *processor, bool auto_delete)
+{
+    /// Add the given JFactoryGenerator to the list of queues
+    ///
+    /// @param processor pointer to an event processor to add.
+    /// @param auto_delete Ownership is passed to JApplication (default)
+	_eventProcessors.push_back( processor );
+	if( auto_delete ) _eventProcessors_to_delete.push_back( processor );
+	mNumProcessorsAdded++;
+}
+>>>>>>> 5aff40ac1dd9cc997b10a38789910289c45843b1
 
     Initialize();
     if(_quitting) return;

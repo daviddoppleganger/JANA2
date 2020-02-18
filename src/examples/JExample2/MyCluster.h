@@ -3,8 +3,6 @@
 #ifndef _MYCLUSTER_H_
 #define _MYCLUSTER_H_
 
-#include <string>
-
 #include <JANA/JObject.h>
 
 class MyCluster:public JObject {

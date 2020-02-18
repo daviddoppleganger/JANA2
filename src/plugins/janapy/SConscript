@@ -25,6 +25,19 @@ try:
 	sbms.AddCompileFlags(env, PYTHON_CFLAGS)
 	sbms.AddLinkFlags(env, PYTHON_LINKFLAGS + " -L"+PYTHON_PREFIX+"/lib")
 
+<<<<<<< HEAD
+=======
+    # Install pybind headers
+    installdir = env.subst('$INSTALLDIR')
+    includedir = "%s/%s" %(env.subst('$INCDIR'), 'janapy')
+    		pluginsdir = env.subst('$PLUGINSDIR')
+
+    		# Install targets
+    		installed = env.Install(pluginsdir, myplugin)
+    		env.Install(includedir, env.Glob('*.h*'))
+
+
+>>>>>>> 5aff40ac1dd9cc997b10a38789910289c45843b1
 	sbms.AddJANA(env)
 	sbms.plugin(env)
 except:

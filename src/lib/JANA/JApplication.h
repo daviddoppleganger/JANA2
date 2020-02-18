@@ -64,6 +64,7 @@ extern JApplication* japp;
 /// of the data. User code (e.g. plugins) will generally register things like event sources
 /// and processors with the JApplication so they can be called up later at the appropriate time.
 //////////////////////////////////////////////////////////////////////////////////////////////////
+<<<<<<< HEAD
 class JApplication {
 
 public:
@@ -124,6 +125,102 @@ public:
 
     template <typename T>
     JParameter* GetParameter(std::string name, T& val);
+=======
+class JApplication{
+
+
+
+	public:
+	
+		enum RETURN_STATUS{
+			kSUCCESS,
+			kNO_MORE_EVENTS,
+			kTRY_AGAIN,
+			kUNKNOWN
+		};
+
+    JApplication(JParameterManager* params = nullptr, std::vector<string>* eventSources = nullptr);
+		virtual ~JApplication();
+
+		int  GetExitCode(void);
+		void Initialize(void);
+		void PrintFinalReport(void);
+		void PrintStatus(void);
+		void Quit(bool skip_join=false);
+		void Run();
+		void SetExitCode(int exit_code);
+		void SetTicker(bool ticker_on=true);
+		void Stop(bool wait_until_idle=false);
+		void Resume(void);
+
+		void Add(JEventSourceGenerator *source_generator);
+		void Add(JFactoryGenerator *factory_generator, bool auto_delete=true);
+		void Add(JEventProcessor *processor, bool auto_delete=true);
+
+		void AddPlugin(string plugin_name);
+		void AddPluginPath(string path);
+		
+		void GetJEventProcessors(vector<JEventProcessor*>& aProcessors);
+		void GetJFactoryGenerators(vector<JFactoryGenerator*> &factory_generators);
+		std::shared_ptr<JLogger> GetJLogger(void);
+		JParameterManager* GetJParameterManager(void);
+		JThreadManager* GetJThreadManager(void) const;
+		JEventSourceManager* GetJEventSourceManager(void) const;
+		
+		//GET/RECYCLE POOL RESOURCES
+		std::shared_ptr<JTask<void>> GetVoidTask(void);
+		JFactorySet* GetFactorySet(void);
+		void Recycle(JFactorySet* aFactorySet);
+		void UpdateResourceLimits(void);
+
+		uint64_t GetNtasksCompleted(string name="");
+		uint64_t GetNeventsProcessed(void);
+		float GetIntegratedRate(void);
+		float GetInstantaneousRate(void);
+		void GetInstantaneousRates(vector<double> &rates_by_queue);
+		void GetIntegratedRates(map<string,double> &rates_by_thread);
+
+		bool IsQuitting(void){ return _quitting; }
+		bool IsDrainingQueues(void){ return _draining_queues; }
+
+		string Val2StringWithPrefix(float val);
+		template<typename T> T GetParameterValue(std::string name);
+		template<typename T> JParameter* SetParameterValue(std::string name, T val);
+	
+	protected:
+
+		bool _initialized = false;
+		size_t _nthreads;
+		int _exit_code;
+		bool _skip_join;
+		bool _quitting;
+		bool _draining_queues;
+		bool _ticker_on;
+		std::chrono::time_point<std::chrono::high_resolution_clock> mRunStartTime;
+		std::vector<string> _plugins;
+		std::vector<string> _plugin_paths;
+		std::vector<void*> _sohandles;
+		std::vector<JFactoryGenerator*> _factoryGenerators;
+        std::vector<JFactoryGenerator*> _factoryGenerators_to_delete;
+		std::vector<JCalibrationGenerator*> _calibrationGenerators;
+		std::vector<JEventProcessor*> _eventProcessors;
+		std::vector<JEventProcessor*> _eventProcessors_to_delete;
+
+		std::shared_ptr<JLogger> _logger;
+		JParameterManager *_pmanager;
+		JEventSourceManager* _eventSourceManager;
+		JThreadManager* _threadManager;
+		std::size_t mNumProcessorsAdded;
+
+		void AttachPlugins(void);
+		void AttachPlugin(string name, bool verbose=false);
+		
+	private:
+
+		// Resource pools
+		JResourcePool<JTask<void>> mVoidTaskPool;
+		JResourcePoolSimple<JFactorySet> mFactorySetPool;
+>>>>>>> 5aff40ac1dd9cc997b10a38789910289c45843b1
 
     template<typename T>
     JParameter* SetParameterValue(std::string name, T val);

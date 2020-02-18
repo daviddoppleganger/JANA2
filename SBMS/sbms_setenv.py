@@ -86,8 +86,16 @@ def mk_setenv_csh(env):
 	str += 'setenv JANA_PLUGIN_PATH ${JANA_HOME}/plugins\n'
 	str += 'setenv PATH ${JANA_HOME}/bin:${PATH}\n'
 	str += '\n'
+	str += '# This only useful if Python support was built in via janapy plugin/extension\n'
+	str += 'if ( $?PYTHONPATH ) then\n'
+	str += '  setenv PYTHONPATH ${JANA_HOME}/plugins:$PYTHONPATH\n'
+	str += 'else\n'
+	str += '  setenv PYTHONPATH ${JANA_HOME}/plugins\n'
+	str += 'endif\n'
+	str += '\n'
 
-	# CCDB
+
+# CCDB
 	ccdb_home = os.getenv('CCDB_HOME')
 	if ccdb_home != None:
 		str += '# CCDB\n'
@@ -188,6 +196,12 @@ def mk_setenv_bash(env):
 	str += '[ ! -z "$HDDS_HOME" ] && export JANA_GEOMETRY_URL=xmlfile://${HDDS_HOME}/main_HDDS.xml\n'
 	str += 'export JANA_PLUGIN_PATH=${JANA_HOME}/plugins\n'
 	str += 'export PATH=${JANA_HOME}/bin:${PATH}\n'
+	str += '\n'
+	str += 'if [ -z "$PYTHONPATH" ]; then\n'
+	str += '  export PYTHONPATH=${JANA_HOME}/plugins\n'
+	str += 'else\n'
+	str += '  export PYTHONPATH=${JANA_HOME}/plugins:$PYTHONPATH\n'
+	str += 'fi\n'
 	str += '\n'
 
 	# CCDB
