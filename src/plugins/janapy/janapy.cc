@@ -4,10 +4,10 @@
 // Creator: davidl (on Darwin amelia.jlab.org 17.7.0 i386)
 //
 // ------ Last repository commit info -----
-// [ Date ]
-// [ Author ]
-// [ Source ]
-// [ Revision ]
+// [ Date: Tue Feb 26 18:13:39 2019 -0500 ]
+// [ Author: Nathan Brei <nbrei@halld3.jlab.org> ]
+// [ Source: src/plugins/janapy/janapy.cc ]
+// [ Revision: c15aad0b0dec2e6f8f29d1f727b2daec6c7cf376 ]
 //
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Jefferson Science Associates LLC Copyright Notice:
@@ -45,11 +45,11 @@ using namespace std;
 
 
 #include <JANA/JApplication.h>
-#include <JANA/JThreadManager.h>
-#include <JANA/JEventSourceManager.h>
-#include <JANA/JCpuInfo.h>
+#include <JANA/Utils/JCpuInfo.h>
+#include <JANA/Services/JParameterManager.h>
 
 #include "pybind11/pybind11.h"
+#include "pybind11/embed.h"
 namespace py = pybind11;
 #include "JEventProcessorPY.h"
 
@@ -59,9 +59,10 @@ void JANA_PythonModuleInit(JApplication *sApp);
 
 static bool PY_INITIALIZED = false; // See JANA_PythonModuleInit
 
+
 // This is temporary and will likely be changed once the new arrow
 // system is fully adopted.
-static JApplication *pyjapp = NULL;
+static JApplication *pyjapp = nullptr;
 
 #ifndef _DBG__
 #define _DBG__ std::cout<<__FILE__<<":"<<__LINE__<<std::endl
@@ -73,13 +74,13 @@ void InitPlugin(JApplication *app){
 	InitJANAPlugin(app);
 
 	// Launch thread to handle Python interpreter.
-//	std::thread thr(JANA_PythonModuleInit, app);
-//	thr.detach();
+	std::thread thr(JANA_PythonModuleInit, app);
+	thr.detach();
 
 	// Wait for interpreter to initialize and possibly run script.
 	// This allows more control from python by stalling the initialization
-	// so it has a chance to modify things a bit before initialization
-	// completes and data processing starts.
+	// so it has a chance to modify things a bit before full JANA
+	// initialization completes and data processing starts.
 	while( !PY_INITIALIZED ) std::this_thread::sleep_for (std::chrono::milliseconds(100));
 }
 } // "C"
@@ -87,6 +88,8 @@ void InitPlugin(JApplication *app){
 //.....................................................
 
 // Trivial wrappers for JApplication (and friends)
+// n.b. The default values here will NEVER be used. They must be passed in explicitly to
+// pybind11 below. They are only here for convenience!
 void     janapy_Start(void) { PY_INITIALIZED = true; }
 void     janapy_Run(void) { pyjapp->Run(); }
 void     janapy_Quit(bool skip_join=false) { pyjapp->Quit(skip_join); }
@@ -94,14 +97,12 @@ void     janapy_Stop(bool wait_until_idle=false) { pyjapp->Stop(wait_until_idle)
 void     janapy_Resume(void) { pyjapp->Resume(); }
 void     janapy_AddPlugin(string plugin_name) { pyjapp->AddPlugin(plugin_name); }
 void     janapy_AddPluginPath(string path) { pyjapp->AddPluginPath(path); }
-void     janapy_AddEventSource(string source) { pyjapp->GetJEventSourceManager()->AddEventSource( source ); }
-uint64_t janapy_GetNtasksCompleted(string name="") { return pyjapp->GetNtasksCompleted( name ); }
-uint64_t janapy_GetNeventsProcessed(void) { return pyjapp->GetNeventsProcessed(); }
+void     janapy_AddEventSource(string source) { pyjapp->Add( source ); }
+void     janapy_SetTicker(bool ticker_on=true) { pyjapp->SetTicker(ticker_on); }
+uint64_t janapy_GetNeventsProcessed(void) { return pyjapp->GetNEventsProcessed(); }
 float    janapy_GetIntegratedRate(void) { return pyjapp->GetIntegratedRate(); }
 float    janapy_GetInstantaneousRate(void) { return pyjapp->GetInstantaneousRate(); }
-void     janapy_GetInstantaneousRates(vector<double> &rates_by_queue) { pyjapp->GetInstantaneousRates(rates_by_queue); }
-void     janapy_GetIntegratedRates(map<string,double> &rates_by_thread) { pyjapp->GetIntegratedRates(rates_by_thread); }
-uint32_t janapy_GetNJThreads(void) { return pyjapp->GetJThreadManager()->GetNJThreads(); }
+uint32_t janapy_GetNThreads(void) { return pyjapp->GetNThreads(); }
 size_t   janapy_GetNcores(void) { return JCpuInfo::GetNumCpus(); }
 string   janapy_GetParameterValue(string key) { return pyjapp->GetJParameterManager()->Exists(key) ? pyjapp->GetParameterValue<string>(key):"Not Defined"; }
 void     janapy_SetParameterValue(string key, string val) { pyjapp->SetParameterValue<string>( key, val ); }
@@ -111,14 +112,16 @@ void janapy_AddProcessor(py::object &pyproc )
 {
     cout << "JANAPY2_AddProcessor called!" << endl;
     JEventProcessorPY *proc = pyproc.cast<JEventProcessorPY *>();
-    pyjapp->Add( proc , false);
+    pyjapp->Add( proc );
 }
 
 //================================================================================
 // Module definition
-// The arguments of this structure tell Python what to call your extension,
+// The arguments of this structure tell Python what to call the extension,
 // what it's methods are and where to look for it's method definitions
-PYBIND11_MODULE(janapy, m) {
+PYBIND11_EMBEDDED_MODULE(janapy, m) {
+
+    m.doc() = "JANA2 Python Interface";
 
     // JEventProcessor
     py::class_<JEventProcessorPY>(m, "JEventProcessor")
@@ -129,493 +132,30 @@ PYBIND11_MODULE(janapy, m) {
     // C-wrapper routines
     m.def("Start",                       &janapy_Start,                       "Allow JANA system to start processing data. (Not needed for short scripts.)");
     m.def("Run",                         &janapy_Run,                         "Begin processing events (use when running python as an extension)");
-    m.def("Quit",                        &janapy_Quit,                        "Tell JANA to quit gracefully");
+    m.def("Quit",                        &janapy_Quit,                        "Tell JANA to quit gracefully", py::arg("skip_join")=false);
     m.def("Stop",                        &janapy_Stop,                        "Tell JANA to (temporarily) stop event processing. If optional agrument is True then block until all threads are stopped.");
     m.def("Resume",                      &janapy_Resume,                      "Tell JANA to resume event processing.");
-    //m.def("WaitUntilAllThreadsRunning",  &janapy_WaitUntilAllThreadsRunning,  "Wait until all threads have entered the running state.");
-    //m.def("WaitUntilAllThreadsIdle",     &janapy_WaitUntilAllThreadsIdle,     "Wait until all threads have entered the idle state.");
-    //m.def("WaitUntilAllThreadsEnded",    &janapy_WaitUntilAllThreadsEnded,    "Wait until all threads have entered the ended state.");
     m.def("AddPlugin",                   &janapy_AddPlugin,                   "Add a plugin to the list of plugins to be attached (call before calling Run)");
     m.def("AddPluginPath",               &janapy_AddPluginPath,               "Add directory to plugin search path");
     m.def("AddEventSource",              &janapy_AddEventSource,              "Add an event source (e.g. filename). Can be given multiple arguments and/or called multiple times.");
-    m.def("GetNtasksCompleted",          &janapy_GetNtasksCompleted,          "Return the number of tasks completed. If specified, only count tasks for that JQueue.");
+    m.def("SetTicker",                   &janapy_SetTicker,                   "Turn off/on the standard screen ticker", py::arg("ticker_on")=true);
     m.def("GetNeventsProcessed",         &janapy_GetNeventsProcessed,         "Return the number of events processed so far.");
     m.def("GetIntegratedRate",           &janapy_GetIntegratedRate,           "Return integrated rate.");
-    m.def("GetIntegratedRates",          &janapy_GetIntegratedRates,          "Return integrated rates for each thread.");
     m.def("GetInstantaneousRate",        &janapy_GetInstantaneousRate,        "Return instantaneous rate.");
-    m.def("GetInstantaneousRates",       &janapy_GetInstantaneousRates,       "Return instantaneous rates for each thread.");
-    m.def("GetNJThreads",                &janapy_GetNJThreads,                "Return current number of JThread objects.");
+    m.def("GetNThreads",                 &janapy_GetNThreads,                 "Return current number of JThread objects.");
     m.def("GetNcores",                   &janapy_GetNcores,                   "Return number of cores reported by system (full + logical).");
     m.def("GetParameterValue",           &janapy_GetParameterValue,           "Return value of given configuration parameter.");
     m.def("SetParameterValue",           &janapy_SetParameterValue,           "Set configuration parameter.");
-    //m.def("SetTicker",                   &janapy_SetTicker,                   "Set ticker on/off that updates at bottom of screen.");
-    //m.def("SetNJThreads",                &janapy_SetNJThreads,                "Set the number of JThread objects by creating or deleting.");
-    //m.def("IsQuitting",                  &janapy_IsQuitting,                  "Returns true if the application quit flag has been set.");
-    //m.def("IsDrainingQueues",            &janapy_IsDrainingQueues,            "Returns true if the application draining queues flag is set indicating all events have been read in.");
-    //m.def("PrintStatus",                 &janapy_PrintStatus,                 "Print current JANA status (ticker without newline).");
-    //m.def("PrintFinalReport",            &janapy_PrintFinalReport,            "Print final JANA status.");
-    //m.def("PrintParameters",             &janapy_PrintParameters,             "Print configuration parameters. Pass True to print all. Otherwise, only non-default ones will be printed.");
+    m.def("AddProcessor",                &janapy_AddProcessor,                "Add an event processor");
 
-
-    m.def("AddProcessor", &janapy_AddProcessor, "Add an event processor");
-
+    // TODO: I think this was left from when I originally had the plugin working as both a module and
+    // TODO: and embedded interpreter. There isa lot of refactoring going on right now so I am focussing on
+    // TODO: the embedded interpreter and commenting this out.
     // Create the JApplication object
-    pyjapp = new JApplication();
+    // pyjapp = new JApplication();
 }
 
 //================================================================================
-
-#if 0
-//..........................................................
-// The following effectively make a template out of "PV" so it can
-// be used to convert all types to PyObjects
-template<typename T> PyObject* PV(T v){ return Py_BuildValue("i", (int)v); }
-template<> PyObject* PV<int>(int v){ return Py_BuildValue("i", v); }
-template<> PyObject* PV<long>(long v){ return Py_BuildValue("l", v); }
-template<> PyObject* PV<float>(float v){ return Py_BuildValue("f", v); }
-template<> PyObject* PV<double>(double v){ return Py_BuildValue("d", v); }
-template<> PyObject* PV<string>(string v){ return Py_BuildValue("s", v.c_str()); }
-template<> PyObject* PV<const char*>(const char* v){ return Py_BuildValue("s", v); }
-
-// 1-D container types (vector, list, set, ...)
-template<typename T>
-PyObject* PVlist( T& c ){
-	PyObject *PList = PyList_New( c.size() );
-	std::size_t i=0;
-	for( auto v : c ) PyList_SET_ITEM( PList, i++, PV(v));
-	return PList;
-}
-
-// map containers
-template<typename K, typename V>
-PyObject* PVdict( std::map<K,V> &m ){
-	PyObject *PDict = PyDict_New();
-	for( auto p : m ) PyDict_SetItem( PDict, PV(p.first), PV(p.second));
-	return PDict;
-}
-
-//..........................................................
-// The following converts PyObject types that may be either single values
-// or arrays into a C++ vector of strings. The "require_str_type" option
-// may be used to require the object types to be strings. Otherwise, they
-// are automatically converted to string representations.
-PyObject* PyObjectToVectorOfStrings(PyObject *args, vector<string> &vstr, bool require_str_type=false)
-{
-	PyObject *pyobj;
-	if(!PyArg_ParseTuple(args, "O", &pyobj)) return NULL;
-	
-	// This may or may not be used below
-	PyObject *iter = PyObject_GetIter(pyobj);
-
-	// Check if this is a single string
-	if( PyUnicode_Check(pyobj) ){
-
-		// single value
-		const char* str = PyUnicode_AsUTF8( pyobj );
-		vstr.push_back( str );
-
-	// Check if this is an iterable list of objects
-	} else if(iter) {
-
-		// iterate over list of values
-		while (true) {
-			PyObject *next = PyIter_Next(iter);
-			if( !next ) break;
-			if( PyUnicode_Check(next) ){
-				// Already a string
-				const char* str = PyUnicode_AsUTF8( next );
-				vstr.push_back( str );
-			}else{
-				// Not a string
-				if( require_str_type ){
-					PyErr_SetString( PyExc_TypeError, "Argument must be string or list of strings. (Not all arugments in list passed were strings!)" );
-					return NULL;
-				} else {
-					// Get string representation
-					const char* str = PyUnicode_AsUTF8( PyObject_Str(next) );
-					vstr.push_back( str );
-				}
-			}
-		}
-
-	}else{
-
-		// Single value that is not a string
-		if( require_str_type ){
-			PyErr_SetString( PyExc_TypeError, "Argument must be string or list of strings. (Argument passed was not a string!)" );
-			return NULL;
-		} else {
-			// Get string representation
-			const char* str = PyUnicode_AsUTF8( PyObject_Str(pyobj) );
-			vstr.push_back( str );
-		}
-	}
-
-	return PV( "" );
-}
-//..........................................................
-
-
-//-------------------------------------
-// janapy_Start
-//-------------------------------------
-static PyObject* janapy_Start(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":Start")) return NULL;
-	PY_INITIALIZED = true;
-	return PV("");
-}
-
-//-------------------------------------
-// janapy_Run
-//-------------------------------------
-static PyObject* janapy_Run(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":Run")) return NULL;
-	pyjapp->Run();
-	return PV("");
-}
-
-//-------------------------------------
-// janapy_Quit
-//-------------------------------------
-static PyObject* janapy_Quit(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":Quit")) return NULL;
-	pyjapp->Quit();
-	return PV("");
-}
-
-//-------------------------------------
-// janapy_Stop
-//-------------------------------------
-static PyObject* janapy_Stop(PyObject *self, PyObject *args)
-{
-	int wait_until_idle=false;
-	if(!PyArg_ParseTuple(args, "|i:Stop", &wait_until_idle)) return NULL;
-	pyjapp->Stop(wait_until_idle);
-	return PV("");
-}
-
-//-------------------------------------
-// janapy_Resume
-//-------------------------------------
-static PyObject* janapy_Resume(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":Resume")) return NULL;
-	pyjapp->Resume();
-	return PV("");
-}
-
-//-------------------------------------
-// janapy_WaitUntilAllThreadsRunning
-//-------------------------------------
-static PyObject* janapy_WaitUntilAllThreadsRunning(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":WaitUntilAllThreadsRunning")) return NULL;
-	PY_INITIALIZED = true; // (in case user doesn't call Start before calling this)
-	pyjapp->GetJThreadManager()->WaitUntilAllThreadsRunning();
-	return PV("");
-}
-
-//-------------------------------------
-// janapy_WaitUntilAllThreadsIdle
-//-------------------------------------
-static PyObject* janapy_WaitUntilAllThreadsIdle(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":WaitUntilAllThreadsIdle")) return NULL;
-	PY_INITIALIZED = true; // (in case user doesn't call Start before calling this)
-	pyjapp->GetJThreadManager()->WaitUntilAllThreadsIdle();
-	return PV("");
-}
-
-//-------------------------------------
-// janapy_WaitUntilAllThreadsEnded
-//-------------------------------------
-static PyObject* janapy_WaitUntilAllThreadsEnded(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":WaitUntilAllThreadsEnded")) return NULL;
-	PY_INITIALIZED = true; // (in case user doesn't call Start before calling this)
-	pyjapp->GetJThreadManager()->WaitUntilAllThreadsEnded();
-	return PV("");
-}
-
-//-------------------------------------
-// janapy_AddPlugin
-//-------------------------------------
-static PyObject* janapy_AddPlugin(PyObject *self, PyObject *args)
-{
-	vector<string> plugins;
-	auto retval = PyObjectToVectorOfStrings( args, plugins, true);
-
-	for(auto p : plugins ) pyjapp->AddPlugin( p );
-
-	return retval;
-}
-
-//-------------------------------------
-// janapy_AddPluginPath
-//-------------------------------------
-static PyObject* janapy_AddPluginPath(PyObject *self, PyObject *args)
-{
-	vector<string> paths;
-	auto retval = PyObjectToVectorOfStrings( args, paths, true);
-
-	for(auto p : paths ) pyjapp->AddPluginPath( p );
-
-	return retval;
-}
-
-//-------------------------------------
-// janapy_AddEventSource
-//-------------------------------------
-static PyObject* janapy_AddEventSource(PyObject *self, PyObject *args)
-{
-	char *key;
-	char *val;
-	if(!PyArg_ParseTuple(args, "s:AddEventSource", &key, &val)) return NULL;
-	pyjapp->SetParameterValue<string>( key, val );
-	return PV( "" );
-}
-
-//-------------------------------------
-// janapy_GetNtasksCompleted
-//-------------------------------------
-static PyObject* janapy_GetNtasksCompleted(PyObject *self, PyObject *args)
-{
-	char name[512] = "";
-	if(!PyArg_ParseTuple(args, "|s:GetNtasksCompleted", name)) return NULL;
-	return PV( pyjapp->GetNtasksCompleted( name ) );
-}
-
-//-------------------------------------
-// janapy_GetNeventsProcessed
-//-------------------------------------
-static PyObject* janapy_GetNeventsProcessed(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":GetNeventsProcessed")) return NULL;
-	return PV( pyjapp->GetNeventsProcessed() );
-}
-
-//-------------------------------------
-// janapy_GetIntegratedRate
-//-------------------------------------
-static PyObject* janapy_GetIntegratedRate(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":GetIntegratedRate")) return NULL;
-	return PV( pyjapp->GetIntegratedRate() );
-}
-
-//-------------------------------------
-// janapy_GetIntegratedRates
-//-------------------------------------
-static PyObject* janapy_GetIntegratedRates(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":GetIntegratedRates")) return NULL;
-	std::map<string,double> rates_by_thread;
-	pyjapp->GetIntegratedRates(rates_by_thread);
-	return PVdict( rates_by_thread );
-}
-
-//-------------------------------------
-// janapy_GetInstantaneousRate
-//-------------------------------------
-static PyObject* janapy_GetInstantaneousRate(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":GetInstantaneousRate")) return NULL;
-	return PV( pyjapp->GetInstantaneousRate() );
-}
-
-//-------------------------------------
-// janapy_GetInstantaneousRates
-//-------------------------------------
-static PyObject* janapy_GetInstantaneousRates(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":GetInstantaneousRates")) return NULL;
-	vector<double> rates_by_queue;
-	pyjapp->GetInstantaneousRates(rates_by_queue);
-	return PVlist( rates_by_queue );
-}
-
-//-------------------------------------
-// janapy_GetNJThreads
-//-------------------------------------
-static PyObject* janapy_GetNJThreads(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":GetNJThreads")) return NULL;
-	return PV( pyjapp->GetJThreadManager()->GetNJThreads() );
-}
-
-//-------------------------------------
-// janapy_GetNcores
-//-------------------------------------
-static PyObject* janapy_GetNcores(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":GetNcores")) return NULL;
-	return PV(JCpuInfo::GetNumCpus());
-}
-
-//-------------------------------------
-// janapy_GetParameterValue
-//-------------------------------------
-static PyObject* janapy_GetParameterValue(PyObject *self, PyObject *args)
-{
-	char *str;
-	if(!PyArg_ParseTuple(args, "s:GetParameterValue", &str)) return NULL;
-	try{
-		std::cout << "\n\rLooking for parameter: " << str << "\n\r";
-		return PV( pyjapp->GetParameterValue<string>( str ) );
-	}catch(...){
-		return PV("Not Defined");
-	}
-}
-
-//-------------------------------------
-// janapy_SetParameterValue
-//-------------------------------------
-static PyObject* janapy_SetParameterValue(PyObject *self, PyObject *args)
-{
-	char *key;
-	PyObject *valobj;
-	if(!PyArg_ParseTuple(args, "sO:SetParameterValue", &key, &valobj)) return NULL;
-	const char* val = PyUnicode_AsUTF8( PyObject_Str(valobj) );
-	pyjapp->SetParameterValue<string>( key, val );
-	return PV( "" );
-}
-
-//-------------------------------------
-// janapy_SetTicker
-//-------------------------------------
-static PyObject* janapy_SetTicker(PyObject *self, PyObject *args)
-{
-	int ticker_on = true;
-	if(!PyArg_ParseTuple(args, "|i:SetTicker", &ticker_on)) return NULL;
-	pyjapp->SetTicker( ticker_on );
-	return PV( "" );
-}
-
-//-------------------------------------
-// janapy_SetNJThreads
-//-------------------------------------
-static PyObject* janapy_SetNJThreads(PyObject *self, PyObject *args)
-{
-	int nthreads=1;
-	if(!PyArg_ParseTuple(args, "i:SetNJThreads", &nthreads)) return NULL;
-	pyjapp->GetJThreadManager()->SetNJThreads( nthreads );
-	return PV( pyjapp->GetJThreadManager()->GetNJThreads() );
-}
-
-//-------------------------------------
-// janapy_IsQuitting
-//-------------------------------------
-static PyObject* janapy_IsQuitting(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":IsQuitting")) return NULL;
-	return PV( pyjapp->IsQuitting() );
-}
-
-//-------------------------------------
-// janapy_IsDrainingQueues
-//-------------------------------------
-static PyObject* janapy_IsDrainingQueues(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":IsDrainingQueues")) return NULL;
-	return PV( pyjapp->IsDrainingQueues() );
-}
-
-//-------------------------------------
-// janapy_PrintStatus
-//-------------------------------------
-static PyObject* janapy_PrintStatus(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":PrintStatus")) return NULL;
-	pyjapp->PrintStatus();
-	return PV( "" );
-}
-
-//-------------------------------------
-// janapy_PrintFinalReport
-//-------------------------------------
-static PyObject* janapy_PrintFinalReport(PyObject *self, PyObject *args)
-{
-	if(!PyArg_ParseTuple(args, ":PrintFinalReport")) return NULL;
-	pyjapp->PrintFinalReport();
-	return PV( "" );
-}
-
-//-------------------------------------
-// janapy_PrintParameters
-//-------------------------------------
-static PyObject* janapy_PrintParameters(PyObject *self, PyObject *args)
-{
-	int print_all = 0;
-	if(!PyArg_ParseTuple(args, "|i:PrintParameters", &print_all)) return NULL;
-	pyjapp->GetJParameterManager()->PrintParameters( print_all );
-	return PV( "" );
-}
-
-
-//.....................................................
-// Define python methods
-static PyMethodDef JANAPYMethods[] = {
-	{"Start",                       janapy_Start,                       METH_VARARGS, "Allow JANA system to start processing data. (Not needed for short scripts.)"},
-	{"Run",                         janapy_Run,                         METH_VARARGS, "Begin processing events (use when running python as an extension)"},
-	{"Quit",                        janapy_Quit,                        METH_VARARGS, "Tell JANA to quit gracefully"},
-	{"Stop",                        janapy_Stop,                        METH_VARARGS, "Tell JANA to (temporarily) stop event processing. If optional agrument is True then block until all threads are stopped."},
-	{"Resume",                      janapy_Resume,                      METH_VARARGS, "Tell JANA to resume event processing."},
-	{"WaitUntilAllThreadsRunning",  janapy_WaitUntilAllThreadsRunning,  METH_VARARGS, "Wait until all threads have entered the running state."},
-	{"WaitUntilAllThreadsIdle",     janapy_WaitUntilAllThreadsIdle,     METH_VARARGS, "Wait until all threads have entered the idle state."},
-	{"WaitUntilAllThreadsEnded",    janapy_WaitUntilAllThreadsEnded,    METH_VARARGS, "Wait until all threads have entered the ended state."},
-	{"AddPlugin",                   janapy_AddPlugin,                   METH_VARARGS, "Add a plugin to the list of plugins to be attached (call before calling Run)"},
-	{"AddPluginPath",               janapy_AddPluginPath,               METH_VARARGS, "Add directory to plugin search path"},
-	{"AddEventSource",              janapy_AddEventSource,              METH_VARARGS, "Add an event source (e.g. filename). Can be given multiple arguments and/or called multiple times."},
-	{"GetNtasksCompleted",          janapy_GetNtasksCompleted,          METH_VARARGS, "Return the number of tasks completed. If specified, only count tasks for that JQueue."},
-	{"GetNeventsProcessed",         janapy_GetNeventsProcessed,         METH_VARARGS, "Return the number of events processed so far."},
-	{"GetIntegratedRate",           janapy_GetIntegratedRate,           METH_VARARGS, "Return integrated rate."},
-	{"GetIntegratedRates",          janapy_GetIntegratedRates,          METH_VARARGS, "Return integrated rates for each thread."},
-	{"GetInstantaneousRate",        janapy_GetInstantaneousRate,        METH_VARARGS, "Return instantaneous rate."},
-	{"GetInstantaneousRates",       janapy_GetInstantaneousRates,       METH_VARARGS, "Return instantaneous rates for each thread."},
-	{"GetNJThreads",                janapy_GetNJThreads,                METH_VARARGS, "Return current number of JThread objects."},
-	{"GetNcores",                   janapy_GetNcores,                   METH_VARARGS, "Return number of cores reported by system (full + logical)."},
-	{"GetParameterValue",           janapy_GetParameterValue,           METH_VARARGS, "Return value of given configuration parameter."},
-	{"SetParameterValue",           janapy_SetParameterValue,           METH_VARARGS, "Set configuration parameter."},
-	{"SetTicker",                   janapy_SetTicker,                   METH_VARARGS, "Set ticker on/off that updates at bottom of screen."},
-	{"SetNJThreads",                janapy_SetNJThreads,                METH_VARARGS, "Set the number of JThread objects by creating or deleting."},
-	{"IsQuitting",                  janapy_IsQuitting,                  METH_VARARGS, "Returns true if the application quit flag has been set."},
-	{"IsDrainingQueues",            janapy_IsDrainingQueues,            METH_VARARGS, "Returns true if the application draining queues flag is set indicating all events have been read in."},
-	{"PrintStatus",                 janapy_PrintStatus,                 METH_VARARGS, "Print current JANA status (ticker without newline)."},
-	{"PrintFinalReport",            janapy_PrintFinalReport,            METH_VARARGS, "Print final JANA status."},
-	{"PrintParameters",             janapy_PrintParameters,             METH_VARARGS, "Print configuration parameters. Pass True to print all. Otherwise, only non-default ones will be printed."},
-	{NULL, NULL, 0, NULL}
-};
-////================================================================================
-//// Module definition
-//// The arguments of this structure tell Python what to call your extension,
-//// what it's methods are and where to look for it's method definitions
-//static struct PyModuleDef janapy__definition = {
-//    PyModuleDef_HEAD_INIT,
-//    "janapy",
-//    "JANA2 Python module.",
-//    -1,
-//    JANAPYMethods
-//};
-//
-////================================================================================
-//// Module entry point (for import)
-//PyMODINIT_FUNC PyInit_janapy(void) {
-//
-//	// Create JApplication. This is temporary and will likely be replaced
-//	// when the arrow system is fully integrated/
-//	pyjapp = new JApplication();
-//
-//	Py_Initialize();
-//	return PyModule_Create(&janapy__definition);
-//}
-
-#endif
-
-
-
 
 //-------------------------------------
 // JANA_PythonModuleInit
@@ -637,31 +177,21 @@ void JANA_PythonModuleInit(JApplication *sApp)
 	///
 	/// IMPORTANT: The janapy InitPlugin routine will block (resulting in the whole
 	/// JANA system pausing) until either this routine finishes or the python
-	/// script it invokes calls "jana.Run()". This is to give the python script
+	/// script it invokes calls "jana.Start()". This is to give the python script
 	/// a chance to modify running conditions prior to event processing starting.
 	/// If the python script intends to run throughout the life of the process,
-	/// then it MUST call jana.Run() at some point. If the script is small and only
+	/// then it MUST call jana.Start() at some point. If the script is small and only
 	/// runs for a short time, then you don't need to call it since it will be
 	/// called automatically when the script ends.
 
-	// Check if interpreter is already initialized and do nothing at all if it is.
-	if( Py_IsInitialized() ){
-		jout << "Python already initialized! Skipping initialization of janapy!" << std::endl;
-		PY_INITIALIZED = true;
-		return;
-	}
+    // Start the interpreter and keep it alive.
+    // NOTE: the interpreter will stop and be deleted once we leave this routine.
+    // This only happens when the python script returns so there will no longer
+    // be any need for it.
+    py::scoped_interpreter guard{};
 
+    // Use existing JApplication.
 	pyjapp = sApp;
-
-	// Initialize interpreter and register the jana module
-	jout << "Initializing embedded Python ... " << std::endl;
-	PyEval_InitThreads();
-	Py_Initialize();
-//#if PY_MAJOR_VERSION >= 3
-//	PyModule_Create(&janapy__definition);
-//#else // Python 2
-//	Py_InitModule("jana", JANAPYMethods);
-//#endif
 
 	// Get name of python file to execute
 	string fname = "jana.py";
@@ -672,26 +202,9 @@ void JANA_PythonModuleInit(JApplication *sApp)
 		if( JANA_PYTHON_FILE ) fname = JANA_PYTHON_FILE;
 	}
 
-//	PyGILState_STATE gstate = PyGILState_Ensure();
-//	PyEval_ReleaseLock();
-//	PyThreadState *_save = PyEval_SaveThread();
-//	Py_BEGIN_ALLOW_THREADS
-
-	auto fil = std::fopen(fname.c_str(), "r");
-	if( fil ) {
-		jout << "Executing Python script: " << fname << " ..." << std::endl;
-		const char *argv = fname.c_str();
-		PySys_SetArgv( 1, (wchar_t**)&argv );
-		PyRun_AnyFileEx( fil, NULL, 1 );
-	}else if( fname != "jana.py" ){
-		jerr << std::endl << "Unable to open \"" << fname << "\"! Quitting." << std::endl << std::endl;
-		pyjapp->Quit();
-		PY_INITIALIZED = true;
-		std::this_thread::sleep_for(std::chrono::seconds(1));
-		exit(-1);
-	}
-
-//	Py_END_ALLOW_THREADS
+	// Execute python script.
+	// n.b. The script may choose to run for the lifetime of the program!
+    py::eval_file(fname);
 
 	PY_INITIALIZED = true;
 }

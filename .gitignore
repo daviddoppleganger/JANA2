@@ -39,17 +39,17 @@
 .cproject
 .settings
 .sconsign.dblite
-SBMS
 Linux_*
 Darwin_*
 .Linux_*
 .Darwin_*
+Makefile
 
 # Doxygen generated files
 #docs/html/*
 docs/latex/*
 
-# Vim swap files
+# IDE artifacts
 *.swp
 cmake-build-debug/*
-.idea
+.idea/* 

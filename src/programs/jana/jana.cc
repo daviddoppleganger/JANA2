@@ -31,8 +31,10 @@
 
 #include <iostream>
 #include <JANA/JApplication.h>
-#include <JANA/JVersion.h>
-#include <JANA/JSignalHandler.h>
+
+#include <JANA/CLI/JVersion.h>
+#include <JANA/CLI/JBenchmarker.h>
+#include <JANA/CLI/JSignalHandler.h>
 
 
 void PrintUsage() {
@@ -66,7 +68,7 @@ void PrintUsage() {
 
 
 void PrintVersion() {
-    /// Prints JANA version information to stdout, for use by the CLI.
+	/// Prints JANA version information to stdout, for use by the CLI.
 
 	std::cout << "          JANA version: " << JVersion::GetVersion()  << std::endl;
 	std::cout << "        JANA ID string: " << JVersion::GetIDstring() << std::endl;
@@ -105,38 +107,55 @@ int Execute(UserOptions& options) {
 	}
 	else {  // All modes which require a JApplication
 
+	    std::cout << "JANA " << JVersion::GetVersion() << " [" << JVersion::GetRevision() << "]" << std::endl;
 		if (options.flags[LoadConfigs]) {
 			// If the user specified an external config file, we should definitely use that
-			std::cout << "Loading functionality is coming soon! File=" << options.load_config_file << std::endl;
+			try {
+				options.params.ReadConfigFile(options.load_config_file);
+			}
+			catch (JException& e) {
+				std::cout << "Problem loading config file '" << options.load_config_file << "'. Exiting." << std::endl << std::endl;
+				exit(-1);
+			}
+			std::cout << "Loaded config file '" << options.load_config_file << "'." << std::endl << std::endl;
 		}
 
-	    auto params_copy = new JParameterManager(options.params); // JApplication owns params_copy
-		JApplication app(params_copy, &options.eventSources);     // JApplication does not own eventSources
-		japp = &app;
-		AddSignalHandlers();
+		auto params_copy = new JParameterManager(options.params); // JApplication owns params_copy, does not own eventSources
+
+		auto app = new JApplication(params_copy);
+        // Keep japp global around for backwards compatibility. Don't use this in new code, however
+		japp = app;
+
+		for (auto event_src : options.eventSources) {
+			app->Add(event_src);
+		}
+		JSignalHandler::register_handlers(app);
 
 		if (options.flags[ShowConfigs]) {
 			// Load all plugins, collect all parameters, exit without running anything
-			app.Initialize();
-			app.GetJParameterManager()->PrintParameters(true);
-			exitStatus = -1;
+			app->Initialize();
+			if (options.flags[Benchmark]) {
+				JBenchmarker benchmarker(app);  // Show benchmarking configs only if benchmarking mode specified
+			}
+			app->GetJParameterManager()->PrintParameters(true);
 		}
 		else if (options.flags[DumpConfigs]) {
-		    // Load all plugins, dump parameters to file, exit without running anything
-			std::cout << "Dumping functionality is coming soon! File=" << options.dump_config_file << std::endl;
-			app.Initialize();
+			// Load all plugins, dump parameters to file, exit without running anything
+			app->Initialize();
+			std::cout << std::endl << "Writing configuration options to file: " << options.dump_config_file << std::endl;
+			app->GetJParameterManager()->WriteConfigFile(options.dump_config_file);
 		}
 		else if (options.flags[Benchmark]) {
 			// Run JANA in benchmark mode
-	    	std::cout << "Benchmark functionality is coming soon!" << std::endl;
-			exitStatus = app.GetExitCode();
+			JBenchmarker benchmarker(app); // Benchmarking params override default params
+			benchmarker.RunUntilFinished(); // Benchmarker will control JApp Run/Stop
 		}
 		else {
 			// Run JANA in normal mode
-			app.Run();
-			exitStatus = app.GetExitCode();
+			app->Run();
 		}
-
+		exitStatus = app->GetExitCode();
+		delete app;
 	}
 	exit(exitStatus);
 }
@@ -146,7 +165,7 @@ int main(int nargs, char *argv[]) {
 
 	UserOptions options;
 
-	map<std::string, Flag> tokenizer;
+	std::map<std::string, Flag> tokenizer;
 	tokenizer["-h"] = ShowUsage;
 	tokenizer["--help"] = ShowUsage;
 	tokenizer["-v"] = ShowVersion;
@@ -166,7 +185,7 @@ int main(int nargs, char *argv[]) {
 
 	for (int i=1; i<nargs; i++){
 
-		string arg = argv[i];
+		std::string arg = argv[i];
 		//std::cout << "Found arg " << arg << std::endl;
 
 		if(argv[i][0] != '-') {
@@ -218,9 +237,9 @@ int main(int nargs, char *argv[]) {
 				if (argv[i][0] == '-' && argv[i][1] == 'P') {
 
 					size_t pos = arg.find("=");
-					if ((pos != string::npos) && (pos > 2)) {
-						string key = arg.substr(2, pos - 2);
-						string val = arg.substr(pos + 1);
+					if ((pos != std::string::npos) && (pos > 2)) {
+						std::string key = arg.substr(2, pos - 2);
+						std::string val = arg.substr(pos + 1);
 						options.params.SetParameter(key, val);
 					} else {
 						std::cout << "Invalid JANA parameter '" << arg
