@@ -1,3 +1,5 @@
+// Copyright 2020, Jefferson Science Associates, LLC.
+// Subject to the terms in the LICENSE file found in the top-level directory.
 //
 //    File: janapy.h
 // Created: Tue Jun 16 14:28:11 EST 2019
@@ -10,32 +12,6 @@
 // [ Revision: c15aad0b0dec2e6f8f29d1f727b2daec6c7cf376 ]
 //
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-// Jefferson Science Associates LLC Copyright Notice:
-// Copyright 251 2014 Jefferson Science Associates LLC All Rights Reserved. Redistribution
-// and use in source and binary forms, with or without modification, are permitted as a
-// licensed user provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this
-//    list of conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this
-//    list of conditions and the following disclaimer in the documentation and/or other
-//    materials provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived
-//    from this software without specific prior written permission.
-// This material resulted from work developed under a United States Government Contract.
-// The Government retains a paid-up, nonexclusive, irrevocable worldwide license in such
-// copyrighted data to reproduce, distribute copies to the public, prepare derivative works,
-// perform publicly and display publicly and to permit others to do so.
-// THIS SOFTWARE IS PROVIDED BY JEFFERSON SCIENCE ASSOCIATES LLC "AS IS" AND ANY EXPRESS
-// OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
-// JEFFERSON SCIENCE ASSOCIATES, LLC OR THE U.S. GOVERNMENT BE LIABLE TO LICENSEE OR ANY
-// THIRD PARTES FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
-// OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-// OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-//- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 #include <thread>
 #include <cstdio>
@@ -46,11 +22,13 @@ using namespace std;
 #include <JANA/JApplication.h>
 #include <JANA/Utils/JCpuInfo.h>
 #include <JANA/Services/JParameterManager.h>
+#include <JANA/../../plugins/JTest/JTestDataObjects.h>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/embed.h>
 namespace py = pybind11;
 #include "JEventProcessorPY.h"
+#include "JEventPY.h"
 
 static bool PY_INITIALIZED = false;
 static JApplication *pyjapp = nullptr;
@@ -84,13 +62,7 @@ inline void     janapy_SetParameterValue(string key, string val) { pyjapp->SetPa
 inline void     janapy_PrintStatus(void) { pyjapp->PrintStatus(); }
 inline void     janapy_PrintParameters(bool all=false) { pyjapp->GetJParameterManager()->PrintParameters(all); }
 
-
-inline void janapy_AddProcessor(py::object &pyproc )
-{
-    cout << "JANAPY2_AddProcessor called!" << endl;
-    JEventProcessorPY *proc = pyproc.cast<JEventProcessorPY *>();
-    pyjapp->Add( proc );
-}
+inline void     janapy_AddProcessor(py::object &pyproc ) {pyjapp->Add( pyproc.cast<JEventProcessorPY *>() );}
 
 //================================================================================
 // Module definition
@@ -104,13 +76,30 @@ inline void janapy_AddProcessor(py::object &pyproc )
 // defined here and used in both modules/jana/jana_module.cc and
 // plugins/janapy/janapy_plugin.cc
 
+
 #define JANA_MODULE_DEF \
 \
 /* JEventProcessor */ \
 py::class_<JEventProcessorPY>(m, "JEventProcessor") \
+.def(py::init<py::object&>(), "Constructor") \
+.def("SetVerbose", &JEventProcessorPY::SetVerbose); \
+\
+/* JEvent */ \
+py::class_<JEventPY>(m, "JEvent") \
 .def(py::init<py::object&>()) \
-.def("Init", &JEventProcessorPY::Init) \
-.def("Process", &JEventProcessorPY::Process); \
+.def("SetVerbose",     &JEventPY::SetVerbose) \
+.def("GetRunNumber",   &JEventPY::GetRunNumber)\
+.def("GetEventNumber", &JEventPY::GetEventNumber)\
+.def("Get",            &JEventPY::Get, "", py::arg("type")=py::none(), py::arg("tag")="")\
+.def("Get2",            &JEventPY::Get2, "", py::arg("type")="None", py::arg("tag")="")\
+.def("GetSingle",      &JEventPY::GetSingle)\
+.def("GetAll",         &JEventPY::GetAll)\
+.def("Insert",         &JEventPY::Insert);\
+\
+/* JTestEventData */ \
+py::class_<JTestEventData>(m, "JTestEventData") \
+.def(py::init<>()) \
+.def_readwrite("buffer",     &JTestEventData::buffer);  \
 \
 /* C-wrapper routines */ \
 m.def("Start",                       &janapy_Start,                       "Allow JANA system to start processing data. (Not needed for short scripts.)"); \
